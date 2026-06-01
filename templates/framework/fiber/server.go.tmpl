@@ -1,0 +1,33 @@
+package server
+
+import (
+	"os"
+	"runtime"
+
+	"github.com/gofiber/fiber/v3"
+	"github.com/gofiber/fiber/v3/middleware/logger"
+	"github.com/gofiber/fiber/v3/middleware/recover"
+)
+
+func StartServer() {
+	f := fiber.New()
+	f.Use(logger.New())
+	f.Use(recover.New())
+	f.Get("/", func(c fiber.Ctx) error {
+		return c.SendString("Hello, World!")
+	})
+
+	a := f.Group("/api")
+	a.Get("/health", func(c fiber.Ctx) error {
+		return c.JSON(fiber.Map{"status": "running", "Active routines": runtime.NumGoroutine()})
+	})
+
+	f.Listen(getEnv("PORT", ":8080"))
+}
+
+func getEnv(key, defaultValue string) string {
+	if value, exists := os.LookupEnv(key); exists {
+		return value
+	}
+	return defaultValue
+}

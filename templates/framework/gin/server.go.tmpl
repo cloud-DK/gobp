@@ -1,0 +1,37 @@
+package server
+
+import (
+	"os"
+	"runtime"
+
+	"github.com/gin-gonic/gin"
+	// Even with automatic TLS, check for more options:
+	"github.com/gin-gonic/autotls"
+)
+
+var domain = "example.com" // Change to your domain for automatic TLS
+
+func StartServer() {
+	r := gin.Default()
+	gin.SetMode(gin.ReleaseMode)
+	r.GET("/", func(c *gin.Context) {
+		c.JSON(200, gin.H{"message": "Hello, World!"})
+	})
+	r.GET("/api/health", func(c *gin.Context) {
+		c.Set("Content-Type", "application/json")
+		c.JSON(200, gin.H{"status": "healthy", "activeRoutines": runtime.NumGoroutine()})
+	})
+	// If domain is set, use automatic TLS, otherwise run without TLS
+	if domain == "example.com" {
+		r.Run(getEnv("PORT", ":8080"))
+	} else {
+		autotls.Run(r, domain)
+	}
+}
+
+func getEnv(key, defaultVal string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return defaultVal
+}

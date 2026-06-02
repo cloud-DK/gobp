@@ -8,8 +8,12 @@ import (
 	"syscall"
 	"time"
 	{{ if .ModuleName  }}
-		{{ if .AppType "server" }}
-			server "{{ .ModuleName }}/internal/server"
+		{{ if .Framework }}
+			"{{ .ModuleName }}/internal/server"
+		{{ end }}
+		{{ if .Database }}
+			// Database type, then select dialect in their respective database.go based on the database type.
+			"{{ .ModuleName }}/internal/db"
 		{{ end }}
 	{{ end }}
 	

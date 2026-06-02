@@ -2,7 +2,7 @@ package templates
 
 import "embed"
 
-//go:embed *
+//go:embed **
 var TemplateFS embed.FS
 
 func GetCategories() ([]string, error) {

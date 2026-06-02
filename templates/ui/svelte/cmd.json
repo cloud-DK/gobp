@@ -1,0 +1,8 @@
+{   
+    "commandString": [
+        "npx",
+        "sv",
+        "create",
+        "${projectName}"
+    ]
+}

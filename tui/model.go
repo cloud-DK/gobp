@@ -3,6 +3,7 @@ package tui
 import (
 	"errors"
 	"sort"
+	"strings"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/cloud-dk/gobp/templates"
@@ -59,7 +60,7 @@ func Run() error {
 func filterCategories(categories []string) []string {
 	filtered := make([]string, 0, len(categories))
 	for _, category := range categories {
-		if category == "common" {
+		if strings.HasPrefix(category, "_") {
 			continue
 		}
 		filtered = append(filtered, category)

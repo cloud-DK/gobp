@@ -1,32 +1,40 @@
 package database
 
 import (
-	"log/slog"
-	"os"
+	"fmt"
 
-	_ "github.com/lib/pq"
 	"xorm.io/xorm"
-)
+{{if eq .Dialect "postgres"}}
+	_ "github.com/lib/pq"
+{{else if eq .Dialect "mysql"}}
+	_ "github.com/go-sql-driver/mysql"
+{{else if eq .Dialect "sqlite"}}
+	_ "github.com/mattn/go-sqlite3"
+{{end}})
 
-var Engine *xorm.Engine
-
-func Connect() error {
-	dsn := getEnv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/{{.ProjectName}}?sslmode=disable")
-	engine, err := xorm.NewEngine("postgres", dsn)
-	if err != nil {
-		return err
-	}
-	if err := engine.Ping(); err != nil {
-		return err
-	}
-	slog.Info("database connected")
-	Engine = engine
-	return nil
+type DB struct {
+	*xorm.Engine
 }
 
-func getEnv(key, def string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
+func New(dsn string) (*DB, error) {
+{{if eq .Dialect "postgres"}}
+	engine, err := xorm.NewEngine("postgres", dsn)
+{{else if eq .Dialect "mysql"}}
+	engine, err := xorm.NewEngine("mysql", dsn)
+{{else if eq .Dialect "sqlite"}}
+	engine, err := xorm.NewEngine("sqlite3", dsn)
+{{end}}
+	if err != nil {
+		return nil, fmt.Errorf("open database: %w", err)
 	}
-	return def
+
+	if err := engine.Ping(); err != nil {
+		return nil, fmt.Errorf("ping database: %w", err)
+	}
+
+	return &DB{engine}, nil
+}
+
+func (db *DB) Close() error {
+	return db.Engine.Close()
 }

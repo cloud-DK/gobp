@@ -29,6 +29,7 @@ func main() {
 		ModuleName: result.ModuleName,
 		Category:   result.Category,
 		Option:     result.Option,
+		Variant:    result.Variant,
 		OutputDir:  outputDir,
 	}); err != nil {
 		fmt.Fprintf(os.Stderr, "error generating project: %v\n", err)

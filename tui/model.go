@@ -14,6 +14,7 @@ type step int
 const (
 	stepCategory step = iota
 	stepOption
+	stepVariant
 	stepModule
 	stepDone
 )
@@ -22,6 +23,7 @@ const (
 type Result struct {
 	Category   string
 	Option     string
+	Variant    string
 	ModuleName string
 }
 
@@ -30,13 +32,15 @@ type Model struct {
 
 	categories []string
 	options    []string
+	variants   []string
 	cursor     int
 	selected   map[int]struct{}
 
-	selectedCategory    string
-	selectedOptionsList []string
-	moduleInput         string
-	err                 error
+	selectedCategory string
+	selectedOption   string
+	selectedVariant  string
+	moduleInput      string
+	err              error
 }
 
 func (m *Model) Init() tea.Cmd {
@@ -68,13 +72,10 @@ func Run() (*Result, error) {
 	}
 
 	fm := final.(*Model)
-	option := ""
-	if len(fm.selectedOptionsList) > 0 {
-		option = fm.selectedOptionsList[0]
-	}
 	return &Result{
 		Category:   fm.selectedCategory,
-		Option:     option,
+		Option:     fm.selectedOption,
+		Variant:    fm.selectedVariant,
 		ModuleName: fm.moduleInput,
 	}, nil
 }

@@ -2,31 +2,52 @@ package database
 
 import (
 	"database/sql"
-	"log/slog"
-	"os"
+	"fmt"
 
 	"github.com/uptrace/bun"
+{{if eq .Dialect "postgres"}}
 	"github.com/uptrace/bun/dialect/pgdialect"
-	"github.com/uptrace/bun/driver/pgdriver"
-)
+	_ "github.com/lib/pq"
+{{else if eq .Dialect "mysql"}}
+	"github.com/uptrace/bun/dialect/mysqldialect"
+	_ "github.com/go-sql-driver/mysql"
+{{else if eq .Dialect "sqlite"}}
+	"github.com/uptrace/bun/dialect/sqlitedialect"
+	"github.com/uptrace/bun/driver/sqliteshim"
+{{end}})
 
-var DB *bun.DB
-
-func Connect() error {
-	dsn := getEnv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/{{.ProjectName}}?sslmode=disable")
-	sqldb := sql.OpenDB(pgdriver.NewConnector(pgdriver.WithDSN(dsn)))
-	db := bun.NewDB(sqldb, pgdialect.New())
-	if err := db.Ping(); err != nil {
-		return err
-	}
-	slog.Info("database connected")
-	DB = db
-	return nil
+type DB struct {
+	*bun.DB
 }
 
-func getEnv(key, def string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
+func New(dsn string) (*DB, error) {
+{{if eq .Dialect "postgres"}}
+	sqldb, err := sql.Open("postgres", dsn)
+	if err != nil {
+		return nil, fmt.Errorf("open database: %w", err)
 	}
-	return def
+	db := bun.NewDB(sqldb, pgdialect.New())
+{{else if eq .Dialect "mysql"}}
+	sqldb, err := sql.Open("mysql", dsn)
+	if err != nil {
+		return nil, fmt.Errorf("open database: %w", err)
+	}
+	db := bun.NewDB(sqldb, mysqldialect.New())
+{{else if eq .Dialect "sqlite"}}
+	sqldb, err := sql.Open(sqliteshim.ShimName, dsn)
+	if err != nil {
+		return nil, fmt.Errorf("open database: %w", err)
+	}
+	db := bun.NewDB(sqldb, sqlitedialect.New())
+{{end}}
+
+	if err := db.Ping(); err != nil {
+		return nil, fmt.Errorf("ping database: %w", err)
+	}
+
+	return &DB{db}, nil
+}
+
+func (db *DB) Close() error {
+	return db.DB.Close()
 }

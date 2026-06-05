@@ -1,29 +1,40 @@
 package database
 
 import (
-	"log/slog"
-	"os"
+	"fmt"
 
-	_ "github.com/lib/pq"
 	"github.com/jmoiron/sqlx"
-)
+{{if eq .Dialect "postgres"}}
+	_ "github.com/lib/pq"
+{{else if eq .Dialect "mysql"}}
+	_ "github.com/go-sql-driver/mysql"
+{{else if eq .Dialect "sqlite"}}
+	_ "github.com/mattn/go-sqlite3"
+{{else if eq .Dialect "sqlserver"}}
+	_ "github.com/microsoft/go-mssqldb"
+{{end}})
 
-var DB *sqlx.DB
-
-func Connect() error {
-	dsn := getEnv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/{{.ProjectName}}?sslmode=disable")
-	db, err := sqlx.Connect("postgres", dsn)
-	if err != nil {
-		return err
-	}
-	slog.Info("database connected")
-	DB = db
-	return nil
+type DB struct {
+	*sqlx.DB
 }
 
-func getEnv(key, def string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
+func New(dsn string) (*DB, error) {
+{{if eq .Dialect "postgres"}}
+	db, err := sqlx.Connect("postgres", dsn)
+{{else if eq .Dialect "mysql"}}
+	db, err := sqlx.Connect("mysql", dsn)
+{{else if eq .Dialect "sqlite"}}
+	db, err := sqlx.Connect("sqlite3", dsn)
+{{else if eq .Dialect "sqlserver"}}
+	db, err := sqlx.Connect("sqlserver", dsn)
+{{end}}
+	if err != nil {
+		return nil, fmt.Errorf("connect to database: %w", err)
 	}
-	return def
+
+	return &DB{db}, nil
+}
+
+func (db *DB) Close() error {
+	return db.DB.Close()
 }

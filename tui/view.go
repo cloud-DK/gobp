@@ -35,13 +35,24 @@ func (m *Model) View() tea.View {
 	case stepOption:
 		sb.WriteString(fmt.Sprintf("\n  Category: %s\n\n", m.selectedCategory))
 		sb.WriteString("  Step 2: Choose an option\n\n")
-		writeToggleList(&sb, m.options, m.selected, m.cursor)
+		writeChoiceList(&sb, m.options, m.cursor)
 		sb.WriteString("\n  ────────────────────────────────────\n")
-		sb.WriteString("  ↑/↓: navigate   space: select   enter: confirm   esc: back   ctrl+c/q: quit\n")
+		sb.WriteString("  ↑/↓: navigate   enter/space: select   esc: back   ctrl+c/q: quit\n")
+
+	case stepVariant:
+		sb.WriteString(fmt.Sprintf("\n  Category: %s   Option: %s\n\n", m.selectedCategory, m.selectedOption))
+		sb.WriteString("  Step 3: Choose a dialect\n\n")
+		writeChoiceList(&sb, m.variants, m.cursor)
+		sb.WriteString("\n  ────────────────────────────────────\n")
+		sb.WriteString("  ↑/↓: navigate   enter/space: select   esc: back   ctrl+c/q: quit\n")
 
 	case stepModule:
-		sb.WriteString(fmt.Sprintf("\n  Category: %s   Option: %s\n\n", m.selectedCategory, m.selectedOptionsList[0]))
-		sb.WriteString("  Step 3: Enter module name\n\n")
+		header := fmt.Sprintf("  Category: %s   Option: %s", m.selectedCategory, m.selectedOption)
+		if m.selectedVariant != "" {
+			header += fmt.Sprintf("   Dialect: %s", m.selectedVariant)
+		}
+		sb.WriteString("\n" + header + "\n\n")
+		sb.WriteString("  Enter module name\n\n")
 		sb.WriteString(fmt.Sprintf("  > %s|\n", m.moduleInput))
 		sb.WriteString("\n  ────────────────────────────────────\n")
 		sb.WriteString("  type module path   enter: confirm   esc: back   ctrl+c/q: quit\n")
@@ -49,7 +60,10 @@ func (m *Model) View() tea.View {
 	case stepDone:
 		sb.WriteString("\n  Done\n\n")
 		sb.WriteString(fmt.Sprintf("  Category: %s\n", m.selectedCategory))
-		sb.WriteString(fmt.Sprintf("  Option:   %s\n", strings.Join(m.selectedOptionsList, ", ")))
+		sb.WriteString(fmt.Sprintf("  Option:   %s\n", m.selectedOption))
+		if m.selectedVariant != "" {
+			sb.WriteString(fmt.Sprintf("  Dialect:  %s\n", m.selectedVariant))
+		}
 		if m.moduleInput != "" {
 			sb.WriteString(fmt.Sprintf("  Module:   %s\n", m.moduleInput))
 		}
@@ -65,15 +79,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyPressMsg:
 		key := msg.String()
 
-		// Module name text input — handle before the shared key map
 		if m.step == stepModule {
 			switch key {
 			case "ctrl+c", "q":
 				return m, tea.Quit
 			case "esc":
-				m.step = stepOption
-				m.cursor = 0
-				m.selectedOptionsList = nil
+				m.step = m.prevFromModule()
 				m.moduleInput = ""
 				return m, nil
 			case "enter":
@@ -98,51 +109,69 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+c", "q":
 			return m, tea.Quit
 		case "esc":
-			switch m.step {
-			case stepOption:
-				m.step = stepCategory
-				m.cursor = 0
-				m.options = nil
-				m.selected = make(map[int]struct{})
-				m.selectedCategory = ""
-			case stepDone:
-				if m.selectedCategory == "ui" {
-					m.step = stepOption
-					m.cursor = 0
-					m.selectedOptionsList = nil
-				} else {
-					m.step = stepModule
-					m.selectedOptionsList = nil
-				}
-			}
+			m.goBack()
 			return m, nil
 		case "up", "k":
 			if m.cursor > 0 {
 				m.cursor--
 			}
 		case "down", "j":
-			switch m.step {
-			case stepCategory:
-				if m.cursor < len(m.categories)-1 {
-					m.cursor++
-				}
-			case stepOption:
-				if m.cursor < len(m.options)-1 {
-					m.cursor++
-				}
+			limit := m.currentListLen() - 1
+			if m.cursor < limit {
+				m.cursor++
 			}
-		case "enter":
-			return m.selectCurrent()
-		case "space":
-			if m.step == stepOption {
-				m.toggleCurrentOption()
-				return m, nil
-			}
+		case "enter", "space":
 			return m.selectCurrent()
 		}
 	}
 
 	return m, nil
+}
+
+func (m *Model) currentListLen() int {
+	switch m.step {
+	case stepCategory:
+		return len(m.categories)
+	case stepOption:
+		return len(m.options)
+	case stepVariant:
+		return len(m.variants)
+	}
+	return 0
+}
+
+func (m *Model) goBack() {
+	switch m.step {
+	case stepOption:
+		m.step = stepCategory
+		m.cursor = 0
+		m.options = nil
+		m.selected = make(map[int]struct{})
+		m.selectedCategory = ""
+	case stepVariant:
+		m.step = stepOption
+		m.cursor = 0
+		m.variants = nil
+		m.selectedOption = ""
+	case stepDone:
+		if m.moduleInput != "" {
+			m.step = stepModule
+		} else if m.selectedVariant != "" {
+			m.step = stepVariant
+			m.cursor = 0
+			m.selectedVariant = ""
+		} else {
+			m.step = stepOption
+			m.cursor = 0
+		}
+	}
+}
+
+func (m *Model) prevFromModule() step {
+	if m.selectedVariant != "" {
+		return stepVariant
+	}
+	return stepOption
 }
 
 func (m *Model) selectCurrent() (tea.Model, tea.Cmd) {
@@ -161,26 +190,33 @@ func (m *Model) selectCurrent() (tea.Model, tea.Cmd) {
 		m.options = options
 		m.cursor = 0
 		m.step = stepOption
-		return m, nil
 
 	case stepOption:
 		if len(m.options) == 0 {
-			m.selectedOptionsList = nil
-			m.step = nextAfterOption(m.selectedCategory)
 			return m, nil
 		}
-		m.selectedOptionsList = m.selectedOptionsList[:0]
-		for i, option := range m.options {
-			if _, ok := m.selected[i]; ok {
-				m.selectedOptionsList = append(m.selectedOptionsList, option)
-			}
-		}
-		if len(m.selectedOptionsList) == 0 {
-			m.selectedOptionsList = append(m.selectedOptionsList, m.options[m.cursor])
-		}
-		m.step = nextAfterOption(m.selectedCategory)
+		m.selectedOption = m.options[m.cursor]
 		m.cursor = 0
-		return m, nil
+		if templates.HasVariants(m.selectedCategory, m.selectedOption) {
+			variants, err := templates.GetVariants(m.selectedCategory, m.selectedOption)
+			if err != nil {
+				m.err = err
+				return m, nil
+			}
+			sort.Strings(variants)
+			m.variants = variants
+			m.step = stepVariant
+		} else {
+			m.step = nextGoStep(m.selectedCategory)
+		}
+
+	case stepVariant:
+		if len(m.variants) == 0 {
+			return m, nil
+		}
+		m.selectedVariant = m.variants[m.cursor]
+		m.cursor = 0
+		m.step = nextGoStep(m.selectedCategory)
 
 	case stepDone:
 		return m, tea.Quit
@@ -189,22 +225,13 @@ func (m *Model) selectCurrent() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func nextAfterOption(category string) step {
+// nextGoStep returns the step after variant/option selection.
+// UI skips the module name step since it runs an external command.
+func nextGoStep(category string) step {
 	if category == "ui" {
 		return stepDone
 	}
 	return stepModule
-}
-
-func (m *Model) toggleCurrentOption() {
-	if m.step != stepOption || len(m.options) == 0 {
-		return
-	}
-	if _, ok := m.selected[m.cursor]; ok {
-		delete(m.selected, m.cursor)
-		return
-	}
-	m.selected = map[int]struct{}{m.cursor: {}}
 }
 
 func writeChoiceList(sb *strings.Builder, items []string, cursor int) {
@@ -218,23 +245,5 @@ func writeChoiceList(sb *strings.Builder, items []string, cursor int) {
 			prefix = fmt.Sprintf("  %s ", selectedIcon)
 		}
 		sb.WriteString(fmt.Sprintf("%s%s\n", prefix, item))
-	}
-}
-
-func writeToggleList(sb *strings.Builder, items []string, selected map[int]struct{}, cursor int) {
-	if len(items) == 0 {
-		sb.WriteString("  (no options found)\n")
-		return
-	}
-	for i, item := range items {
-		pointer := "   "
-		if i == cursor {
-			pointer = fmt.Sprintf(" %s ", selectedIcon)
-		}
-		check := uncheckedIcon
-		if _, ok := selected[i]; ok {
-			check = checkedIcon
-		}
-		sb.WriteString(fmt.Sprintf("%s[%s] %s\n", pointer, check, item))
 	}
 }

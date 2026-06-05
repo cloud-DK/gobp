@@ -1,8 +1,10 @@
 package generator
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"go/format"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -17,6 +19,7 @@ type Config struct {
 	ModuleName string
 	Category   string
 	Option     string
+	Variant    string // dialect or sub-option, empty if none
 	OutputDir  string
 }
 
@@ -25,6 +28,7 @@ type templateData struct {
 	ProjectName string
 	Category    string
 	Framework   string
+	Dialect     string
 }
 
 type cmdFile struct {
@@ -44,6 +48,7 @@ func Generate(cfg Config) error {
 		ProjectName: projectName(cfg.ModuleName, cfg.OutputDir),
 		Category:    cfg.Category,
 		Framework:   cfg.Option,
+		Dialect:     cfg.Variant,
 	}
 
 	if err := writeDir("_shared", cfg.OutputDir, data); err != nil {
@@ -95,12 +100,17 @@ func writeDir(srcDir, outBase string, data templateData) error {
 		if err != nil {
 			return fmt.Errorf("parse %s: %w", path, err)
 		}
-		f, err := os.Create(outPath)
-		if err != nil {
-			return err
+		var buf bytes.Buffer
+		if err := tmpl.Execute(&buf, data); err != nil {
+			return fmt.Errorf("execute %s: %w", path, err)
 		}
-		defer f.Close()
-		return tmpl.Execute(f, data)
+		out := buf.Bytes()
+		if strings.HasSuffix(outName, ".go") {
+			if formatted, err := format.Source(out); err == nil {
+				out = formatted
+			}
+		}
+		return os.WriteFile(outPath, out, 0644)
 	})
 }
 

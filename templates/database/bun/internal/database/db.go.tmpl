@@ -1,0 +1,32 @@
+package database
+
+import (
+	"database/sql"
+	"log/slog"
+	"os"
+
+	"github.com/uptrace/bun"
+	"github.com/uptrace/bun/dialect/pgdialect"
+	"github.com/uptrace/bun/driver/pgdriver"
+)
+
+var DB *bun.DB
+
+func Connect() error {
+	dsn := getEnv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/{{.ProjectName}}?sslmode=disable")
+	sqldb := sql.OpenDB(pgdriver.NewConnector(pgdriver.WithDSN(dsn)))
+	db := bun.NewDB(sqldb, pgdialect.New())
+	if err := db.Ping(); err != nil {
+		return err
+	}
+	slog.Info("database connected")
+	DB = db
+	return nil
+}
+
+func getEnv(key, def string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return def
+}

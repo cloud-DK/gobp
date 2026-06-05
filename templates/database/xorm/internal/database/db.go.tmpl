@@ -1,0 +1,32 @@
+package database
+
+import (
+	"log/slog"
+	"os"
+
+	_ "github.com/lib/pq"
+	"xorm.io/xorm"
+)
+
+var Engine *xorm.Engine
+
+func Connect() error {
+	dsn := getEnv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/{{.ProjectName}}?sslmode=disable")
+	engine, err := xorm.NewEngine("postgres", dsn)
+	if err != nil {
+		return err
+	}
+	if err := engine.Ping(); err != nil {
+		return err
+	}
+	slog.Info("database connected")
+	Engine = engine
+	return nil
+}
+
+func getEnv(key, def string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return def
+}

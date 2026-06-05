@@ -2,7 +2,7 @@ package templates
 
 import "embed"
 
-//go:embed all:_shared server cli ui
+//go:embed all:_shared server cli ui database
 var TemplateFS embed.FS
 
 func GetCategories() ([]string, error) {

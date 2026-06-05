@@ -1,0 +1,29 @@
+package database
+
+import (
+	"log/slog"
+	"os"
+
+	_ "github.com/lib/pq"
+	"github.com/jmoiron/sqlx"
+)
+
+var DB *sqlx.DB
+
+func Connect() error {
+	dsn := getEnv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/{{.ProjectName}}?sslmode=disable")
+	db, err := sqlx.Connect("postgres", dsn)
+	if err != nil {
+		return err
+	}
+	slog.Info("database connected")
+	DB = db
+	return nil
+}
+
+func getEnv(key, def string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return def
+}

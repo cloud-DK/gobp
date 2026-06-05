@@ -1,0 +1,29 @@
+package database
+
+import (
+	"log/slog"
+	"os"
+
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
+)
+
+var DB *gorm.DB
+
+func Connect() error {
+	dsn := getEnv("DATABASE_URL", "host=localhost user=postgres password=postgres dbname={{.ProjectName}} port=5432 sslmode=disable")
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+	if err != nil {
+		return err
+	}
+	slog.Info("database connected")
+	DB = db
+	return nil
+}
+
+func getEnv(key, def string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return def
+}

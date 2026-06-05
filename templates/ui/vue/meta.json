@@ -1,4 +1,5 @@
 {
   "name": "Vue",
-  "description": "Vite + Vue 3 — scaffolded via npm create vite@latest"
+  "description": "Vite + Vue 3 — scaffolded via npm create vite@latest",
+  "isCmd": true
 }

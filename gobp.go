@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 
 	"github.com/cloud-dk/gobp/generator"
+	"github.com/cloud-dk/gobp/templates"
 	"github.com/cloud-dk/gobp/tui"
 )
 
@@ -36,17 +37,36 @@ func main() {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}
+
+	// createdOutputDir is the directory gobp created; removed on any generation error.
+	var createdOutputDir string
 	if result.OutputDir != "" {
 		outputDir = filepath.Join(outputDir, result.OutputDir)
-		if err := os.MkdirAll(outputDir, 0755); err != nil {
-			fmt.Fprintf(os.Stderr, "error creating output directory: %v\n", err)
+		if _, statErr := os.Stat(outputDir); os.IsNotExist(statErr) {
+			if err := os.MkdirAll(outputDir, 0755); err != nil {
+				fmt.Fprintf(os.Stderr, "error creating output directory: %v\n", err)
+				os.Exit(1)
+			}
+			createdOutputDir = outputDir
+		} else if statErr != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", statErr)
 			os.Exit(1)
 		}
 	}
 
+	// failf prints the error and removes any directory gobp created before exiting.
+	failf := func(format string, args ...any) {
+		fmt.Fprintf(os.Stderr, format+"\n", args...)
+		if createdOutputDir != "" {
+			os.RemoveAll(createdOutputDir)
+		}
+		os.Exit(1)
+	}
+
 	needsModInit := false
 	for _, sel := range result.Selections {
-		if sel.Category != "ui" {
+		meta, _ := templates.GetMeta(sel.Category, sel.Option)
+		if meta == nil || !meta.IsCmd {
 			needsModInit = true
 			break
 		}
@@ -54,8 +74,7 @@ func main() {
 
 	if needsModInit {
 		if err := generator.WriteShared(result.ModuleName, outputDir); err != nil {
-			fmt.Fprintf(os.Stderr, "error writing shared templates: %v\n", err)
-			os.Exit(1)
+			failf("error writing shared templates: %v", err)
 		}
 	}
 
@@ -67,15 +86,13 @@ func main() {
 			Variant:    sel.Variant,
 			OutputDir:  outputDir,
 		}); err != nil {
-			fmt.Fprintf(os.Stderr, "error generating %s/%s: %v\n", sel.Category, sel.Option, err)
-			os.Exit(1)
+			failf("error generating %s/%s: %v", sel.Category, sel.Option, err)
 		}
 	}
 
 	if needsModInit && result.ModuleName != "" {
 		if err := generator.GoModInit(result.ModuleName, outputDir); err != nil {
-			fmt.Fprintf(os.Stderr, "error running go mod init: %v\n", err)
-			os.Exit(1)
+			failf("error running go mod init: %v", err)
 		}
 	}
 

@@ -1,4 +1,0 @@
-postgres
-mysql
-sqlite
-sqlserver

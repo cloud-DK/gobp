@@ -58,6 +58,9 @@ func (m *Model) View() tea.View {
 		sb.WriteString(strings.Join(parts, "  ·  "))
 		sb.WriteString("\n\n  Enter module name\n\n")
 		sb.WriteString(fmt.Sprintf("  › %s|\n", m.moduleInput))
+		if m.moduleErr != "" {
+			sb.WriteString(fmt.Sprintf("  ! %s\n", m.moduleErr))
+		}
 		sb.WriteString("\n" + divider)
 		sb.WriteString("  type module path   enter: confirm   esc: back   ctrl+c/q: quit\n")
 

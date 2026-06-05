@@ -15,5 +15,4 @@ const ASCIILogo = `
 
 var BrandStyle = lipgloss.NewStyle().
 	Bold(true).
-	Foreground(lipgloss.Color("#FAFAFA")).
 	Padding(0, 2)

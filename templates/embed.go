@@ -11,6 +11,7 @@ var TemplateFS embed.FS
 type Meta struct {
 	Name        string        `json:"name"`
 	Description string        `json:"description"`
+	IsCmd       bool          `json:"isCmd,omitempty"` // true for categories that run an external command (not go mod init)
 	Dialects    []DialectMeta `json:"dialects,omitempty"`
 }
 
@@ -64,12 +65,12 @@ func GetMeta(category, option string) (*Meta, error) {
 	return &m, nil
 }
 
-func HasVariants(category, option string) bool {
+func HasVariants(category, option string) (bool, error) {
 	m, err := GetMeta(category, option)
 	if err != nil {
-		return false
+		return false, err
 	}
-	return len(m.Dialects) > 0
+	return len(m.Dialects) > 0, nil
 }
 
 func GetVariants(category, option string) ([]DialectMeta, error) {

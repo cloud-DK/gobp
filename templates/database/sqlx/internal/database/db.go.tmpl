@@ -6,7 +6,7 @@ import (
 
 	"github.com/jmoiron/sqlx"
 {{- if eq .Dialect "postgres"}}
-	_ "github.com/lib/pq"
+	_ "github.com/jackc/pgx/v5/stdlib"
 {{- else if eq .Dialect "mysql"}}
 	_ "github.com/go-sql-driver/mysql"
 {{- else if eq .Dialect "sqlite"}}
@@ -22,7 +22,7 @@ type DB struct {
 
 func New(dsn string) (*DB, error) {
 {{- if eq .Dialect "postgres"}}
-	db, err := sqlx.Connect("postgres", dsn)
+	db, err := sqlx.Connect("pgx", dsn)
 {{- else if eq .Dialect "mysql"}}
 	db, err := sqlx.Connect("mysql", dsn)
 {{- else if eq .Dialect "sqlite"}}

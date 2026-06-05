@@ -2,6 +2,7 @@ package generator
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"go/format"
@@ -11,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"text/template"
+	"time"
 
 	"github.com/cloud-dk/gobp/templates"
 )
@@ -65,7 +67,9 @@ func Generate(cfg Config) error {
 }
 
 func GoModInit(moduleName, dir string) error {
-	cmd := exec.Command("go", "mod", "init", moduleName)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "go", "mod", "init", moduleName)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Dir = dir
@@ -78,7 +82,7 @@ func writeDir(srcDir, outBase string, data templateData) error {
 			return err
 		}
 		base := filepath.Base(path)
-		if base == "dialects.txt" || base == "meta.json" {
+		if base == "meta.json" {
 			return nil
 		}
 
@@ -89,11 +93,22 @@ func writeDir(srcDir, outBase string, data templateData) error {
 		rel = filepath.ToSlash(rel)
 
 		outName := strings.TrimSuffix(rel, ".tmpl")
+		// embed.FS silently drops files whose name starts with '.', so template
+		// authors name the file "gitignore" and we rename it on the way out.
 		if outName == "gitignore" {
 			outName = ".gitignore"
 		}
 
 		outPath := filepath.Join(outBase, filepath.FromSlash(outName))
+
+		// Protect hand-edited Go source files from silent overwrite.
+		// Check before MkdirAll so a conflict never leaves an empty directory on disk.
+		if strings.HasSuffix(outName, ".go") {
+			if _, statErr := os.Stat(outPath); statErr == nil {
+				return fmt.Errorf("%s already exists; run gobp in an empty directory or remove the file first", outName)
+			}
+		}
+
 		if err := os.MkdirAll(filepath.Dir(outPath), 0755); err != nil {
 			return err
 		}
@@ -133,12 +148,17 @@ func runCmd(raw []byte, cfg Config) error {
 	if err := json.Unmarshal(raw, &cf); err != nil {
 		return fmt.Errorf("parse cmd.json: %w", err)
 	}
+	if len(cf.Cmd) == 0 {
+		return fmt.Errorf("cmd.json has an empty cmd array")
+	}
 	name := ProjectName(cfg.ModuleName, cfg.OutputDir)
 	args := make([]string, len(cf.Cmd))
 	for i, a := range cf.Cmd {
 		args[i] = strings.ReplaceAll(a, "${projectName}", name)
 	}
-	cmd := exec.Command(args[0], args[1:]...)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = os.Stdin

@@ -56,6 +56,7 @@ type Model struct {
 	selections []Selection
 
 	moduleInput    string
+	moduleErr      string // set when user submits an invalid module path
 	outputInSubdir bool
 
 	err     error
@@ -122,23 +123,49 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m *Model) handleModuleInput(key string) (tea.Model, tea.Cmd) {
 	switch key {
 	case "esc":
-		m.goBack()
-		m.moduleInput = ""
+		m.moduleErr = ""
+		if err := m.goBack(); err != nil {
+			return m.setError(err, stepCategories)
+		}
 	case "enter":
-		if m.moduleInput != "" {
+		if m.moduleInput == "" {
+			m.moduleErr = "module path cannot be empty"
+		} else if err := validateModulePath(m.moduleInput); err != nil {
+			m.moduleErr = err.Error()
+		} else {
+			m.moduleErr = ""
 			m.cursor = 0
 			m.step = stepOutputDir
 		}
 	case "backspace", "ctrl+h":
+		m.moduleErr = ""
 		if len(m.moduleInput) > 0 {
 			m.moduleInput = m.moduleInput[:len(m.moduleInput)-1]
 		}
 	default:
+		m.moduleErr = ""
 		if utf8.RuneCountInString(key) == 1 {
 			m.moduleInput += key
 		}
 	}
 	return m, nil
+}
+
+// validateModulePath returns an error if the module path is invalid.
+// Go module paths must be non-empty, contain no spaces, and have no empty path segments.
+func validateModulePath(s string) error {
+	if strings.ContainsAny(s, " \t") {
+		return errors.New("module path must not contain spaces")
+	}
+	if strings.HasPrefix(s, "/") || strings.HasSuffix(s, "/") {
+		return errors.New("module path must not start or end with '/'")
+	}
+	for _, part := range strings.Split(s, "/") {
+		if part == "" {
+			return errors.New("module path must not contain '//'")
+		}
+	}
+	return nil
 }
 
 func (m *Model) handleNavInput(key string) (tea.Model, tea.Cmd) {
@@ -149,8 +176,8 @@ func (m *Model) handleNavInput(key string) (tea.Model, tea.Cmd) {
 		if m.step == stepError {
 			m.step = m.errPrev
 			m.err = nil
-		} else {
-			m.goBack()
+		} else if err := m.goBack(); err != nil {
+			return m.setError(err, stepCategories)
 		}
 	case "up", "k":
 		if m.cursor > 0 {
@@ -187,7 +214,7 @@ func (m *Model) currentListLen() int {
 	return 0
 }
 
-func (m *Model) goBack() {
+func (m *Model) goBack() error {
 	switch m.step {
 	case stepOption:
 		m.step = stepCategories
@@ -202,14 +229,33 @@ func (m *Model) goBack() {
 		m.variants = nil
 		m.cursor = 0
 	case stepModule:
-		m.step = stepCategories
-		m.pendingCategories = nil
-		m.currentCategory = item{}
-		m.currentOption = item{}
-		m.options = nil
-		m.variants = nil
 		m.moduleInput = ""
 		m.cursor = 0
+		if len(m.selections) == 0 {
+			m.step = stepCategories
+			return nil
+		}
+		last := m.selections[len(m.selections)-1]
+		m.selections = m.selections[:len(m.selections)-1]
+		m.currentCategory = item{name: last.Category}
+		options, err := loadOptions(last.Category)
+		if err != nil {
+			return err
+		}
+		m.options = options
+		if last.Variant != "" {
+			variants, err := loadVariants(last.Category, last.Option)
+			if err != nil {
+				return err
+			}
+			m.variants = variants
+			m.currentOption = item{name: last.Option}
+			m.step = stepVariant
+		} else {
+			m.variants = nil
+			m.currentOption = item{}
+			m.step = stepOption
+		}
 	case stepOutputDir:
 		m.step = stepModule
 		m.cursor = 0
@@ -221,6 +267,7 @@ func (m *Model) goBack() {
 			m.cursor = 0
 		}
 	}
+	return nil
 }
 
 func (m *Model) setError(err error, returnTo step) (tea.Model, tea.Cmd) {
@@ -258,7 +305,11 @@ func (m *Model) selectCurrent() (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		opt := m.options[m.cursor]
-		if templates.HasVariants(m.currentCategory.name, opt.name) {
+		hasVariants, err := templates.HasVariants(m.currentCategory.name, opt.name)
+		if err != nil {
+			return m.setError(err, stepOption)
+		}
+		if hasVariants {
 			variants, err := loadVariants(m.currentCategory.name, opt.name)
 			if err != nil {
 				return m.setError(err, stepOption)
@@ -269,7 +320,11 @@ func (m *Model) selectCurrent() (tea.Model, tea.Cmd) {
 			m.step = stepVariant
 		} else {
 			m.selections = append(m.selections, Selection{m.currentCategory.name, opt.name, ""})
-			m.step = m.advanceFromSelections()
+			nextStep, err := m.advanceFromSelections()
+			if err != nil {
+				return m.setError(err, stepOption)
+			}
+			m.step = nextStep
 		}
 
 	case stepVariant:
@@ -278,7 +333,11 @@ func (m *Model) selectCurrent() (tea.Model, tea.Cmd) {
 		}
 		v := m.variants[m.cursor]
 		m.selections = append(m.selections, Selection{m.currentCategory.name, m.currentOption.name, v.name})
-		m.step = m.advanceFromSelections()
+		nextStep, err := m.advanceFromSelections()
+		if err != nil {
+			return m.setError(err, stepVariant)
+		}
+		m.step = nextStep
 
 	case stepOutputDir:
 		m.outputInSubdir = m.cursor == 1
@@ -290,24 +349,22 @@ func (m *Model) selectCurrent() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m *Model) advanceFromSelections() step {
+func (m *Model) advanceFromSelections() (step, error) {
 	if len(m.pendingCategories) > 0 {
 		m.currentCategory = m.pendingCategories[0]
 		m.pendingCategories = m.pendingCategories[1:]
 		options, err := loadOptions(m.currentCategory.name)
 		if err != nil {
-			m.err = err
-			m.errPrev = stepOption
-			return stepError
+			return stepError, err
 		}
 		m.options = options
 		m.currentOption = item{}
 		m.variants = nil
 		m.cursor = 0
-		return stepOption
+		return stepOption, nil
 	}
 	m.cursor = 0
-	return stepModule
+	return stepModule, nil
 }
 
 // loadOptions fetches options for a category and enriches them with descriptions from meta.json.

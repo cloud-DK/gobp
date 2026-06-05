@@ -10,6 +10,8 @@ import (
 )
 
 var selectedIcon = ">"
+var checkedIcon = "✓"
+var uncheckedIcon = " "
 
 func (m *Model) View() tea.View {
 	var sb strings.Builder
@@ -26,19 +28,19 @@ func (m *Model) View() tea.View {
 		sb.WriteString("\n  Step 1 of 2: Choose a category\n\n")
 		writeChoiceList(&sb, m.categories, m.cursor)
 		sb.WriteString("\n  ────────────────────────────────────\n")
-		sb.WriteString("  ↑/↓: navigate   enter: select   ctrl+c/q: quit\n")
+		sb.WriteString("  ↑/↓: navigate   enter/space: select   ctrl+c/q: quit\n")
 
 	case stepOption:
 		sb.WriteString(fmt.Sprintf("\n  Category: %s\n\n", m.selectedCategory))
-		sb.WriteString("  Step 2 of 2: Choose a template option\n\n")
-		writeChoiceList(&sb, m.options, m.cursor)
+		sb.WriteString("  Step 2 of 2: Choose template options\n\n")
+		writeToggleList(&sb, m.options, m.selected, m.cursor)
 		sb.WriteString("\n  ────────────────────────────────────\n")
-		sb.WriteString("  ↑/↓: navigate   enter: select   ctrl+c/q: quit\n")
+		sb.WriteString("  ↑/↓: navigate   space: toggle   enter: confirm   ctrl+c/q: quit\n")
 
 	case stepDone:
 		sb.WriteString("\n  Selection complete\n\n")
 		sb.WriteString(fmt.Sprintf("  Category: %s\n", m.selectedCategory))
-		sb.WriteString(fmt.Sprintf("  Option:   %s\n", m.selectedOption))
+		sb.WriteString(fmt.Sprintf("  Options:  %s\n", strings.Join(m.selectedOptionsList, ", ")))
 		sb.WriteString("\n  ────────────────────────────────────\n")
 		sb.WriteString("  enter/q: quit\n")
 	}
@@ -58,7 +60,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "down", "j":
 			m.moveCursorDown()
-		case "enter", " ":
+		case "enter":
+			return m.selectCurrent()
+		case "space":
+			if m.step == stepOption {
+				m.toggleCurrentOption()
+				return m, nil
+			}
 			return m.selectCurrent()
 		}
 	}
@@ -99,9 +107,19 @@ func (m *Model) selectCurrent() (tea.Model, tea.Cmd) {
 
 	case stepOption:
 		if len(m.options) == 0 {
+			m.selectedOptionsList = nil
+			m.step = stepDone
 			return m, nil
 		}
-		m.selectedOption = m.options[m.cursor]
+		m.selectedOptionsList = m.selectedOptionsList[:0]
+		for i, option := range m.options {
+			if _, ok := m.selected[i]; ok {
+				m.selectedOptionsList = append(m.selectedOptionsList, option)
+			}
+		}
+		if len(m.selectedOptionsList) == 0 {
+			m.selectedOptionsList = append(m.selectedOptionsList, m.options[m.cursor])
+		}
 		m.step = stepDone
 		m.cursor = 0
 		return m, nil
@@ -111,6 +129,17 @@ func (m *Model) selectCurrent() (tea.Model, tea.Cmd) {
 	}
 
 	return m, nil
+}
+
+func (m *Model) toggleCurrentOption() {
+	if m.step != stepOption || len(m.options) == 0 {
+		return
+	}
+	if _, ok := m.selected[m.cursor]; ok {
+		delete(m.selected, m.cursor)
+		return
+	}
+	m.selected[m.cursor] = struct{}{}
 }
 
 func writeChoiceList(sb *strings.Builder, items []string, cursor int) {
@@ -125,5 +154,24 @@ func writeChoiceList(sb *strings.Builder, items []string, cursor int) {
 			prefix = fmt.Sprintf("  %s ", selectedIcon)
 		}
 		sb.WriteString(fmt.Sprintf("%s%s\n", prefix, item))
+	}
+}
+
+func writeToggleList(sb *strings.Builder, items []string, selected map[int]struct{}, cursor int) {
+	if len(items) == 0 {
+		sb.WriteString("  (no options found)\n")
+		return
+	}
+
+	for i, item := range items {
+		pointer := "   "
+		if i == cursor {
+			pointer = fmt.Sprintf(" %s ", selectedIcon)
+		}
+		check := uncheckedIcon
+		if _, ok := selected[i]; ok {
+			check = checkedIcon
+		}
+		sb.WriteString(fmt.Sprintf("%s[%s] %s\n", pointer, check, item))
 	}
 }

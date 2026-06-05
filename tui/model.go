@@ -22,10 +22,11 @@ type Model struct {
 	categories []string
 	options    []string
 	cursor     int
+	selected   map[int]struct{}
 
-	selectedCategory string
-	selectedOption   string
-	err              error
+	selectedCategory    string
+	selectedOptionsList []string
+	err                 error
 }
 
 func (m *Model) Init() tea.Cmd {
@@ -47,6 +48,7 @@ func Run() error {
 	m := &Model{
 		step:       stepCategory,
 		categories: categories,
+		selected:   make(map[int]struct{}),
 	}
 
 	p := tea.NewProgram(m)

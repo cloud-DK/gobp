@@ -1,4 +1,4 @@
-module github.com/cloud-DK/gobp
+module github.com/cloud-dk/gobp
 
 go 1.26.3
 

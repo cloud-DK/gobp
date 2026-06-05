@@ -1,17 +1,31 @@
 package tui
 
-import tea "charm.land/bubbletea/v2"
+import (
+	"errors"
+	"sort"
+
+	tea "charm.land/bubbletea/v2"
+	"github.com/cloud-dk/gobp/templates"
+)
+
+type step int
+
+const (
+	stepCategory step = iota
+	stepOption
+	stepDone
+)
 
 type Model struct {
-	// Available categories and options
-	Categories []string
-	Options    []string
-	// SelectedCategory maps category index to selected category name
-	SelectedCategory map[int]bool
-	SelectedOption   map[int]bool
+	step step
 
-	// Cursor position while navigating different stuff.
-	Cursor int
+	categories []string
+	options    []string
+	cursor     int
+
+	selectedCategory string
+	selectedOption   string
+	err              error
 }
 
 func (m *Model) Init() tea.Cmd {
@@ -19,11 +33,34 @@ func (m *Model) Init() tea.Cmd {
 }
 
 func Run() error {
-	m := &Model{
-		SelectedCategory: make(map[int]bool),
-		SelectedOption:   make(map[int]bool),
+	categories, err := templates.GetCategories()
+	if err != nil {
+		return err
 	}
+
+	categories = filterCategories(categories)
+	sort.Strings(categories)
+	if len(categories) == 0 {
+		return errors.New("no template categories found")
+	}
+
+	m := &Model{
+		step:       stepCategory,
+		categories: categories,
+	}
+
 	p := tea.NewProgram(m)
-	_, err := p.Run()
+	_, err = p.Run()
 	return err
+}
+
+func filterCategories(categories []string) []string {
+	filtered := make([]string, 0, len(categories))
+	for _, category := range categories {
+		if category == "common" {
+			continue
+		}
+		filtered = append(filtered, category)
+	}
+	return filtered
 }

@@ -7,7 +7,8 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
-	"github.com/cloud-DK/gobp/tui"
+
+	"github.com/cloud-dk/gobp/tui"
 )
 
 func main() {

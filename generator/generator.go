@@ -57,10 +57,10 @@ func Generate(cfg Config) error {
 	if err := writeDir(optionPath, cfg.OutputDir, data); err != nil {
 		return fmt.Errorf("option templates: %w", err)
 	}
-	return goModInit(cfg.ModuleName, cfg.OutputDir)
+	return nil
 }
 
-func goModInit(moduleName, dir string) error {
+func GoModInit(moduleName, dir string) error {
 	cmd := exec.Command("go", "mod", "init", moduleName)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -72,6 +72,9 @@ func writeDir(srcDir, outBase string, data templateData) error {
 	return fs.WalkDir(templates.TemplateFS, srcDir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
 			return err
+		}
+		if filepath.Base(path) == "dialects.txt" {
+			return nil
 		}
 
 		rel, _ := filepath.Rel(srcDir, path)

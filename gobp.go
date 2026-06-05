@@ -7,6 +7,7 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+	"github.com/cloud-DK/gobp/tui"
 )
 
 func main() {
@@ -18,6 +19,11 @@ func main() {
 		elapsed := time.Since(startTime)
 		fmt.Printf("Execution took %s\n", elapsed)
 	}()
+
+	if err := tui.Run(); err != nil {
+		fmt.Printf("Error running TUI: %v\n", err)
+		os.Exit(1)
+	}
 }
 
 func shutdown(startTime time.Time, ctx context.Context) {

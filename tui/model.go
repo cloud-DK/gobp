@@ -14,6 +14,16 @@ type Model struct {
 	Cursor int
 }
 
-func (m Model) Init() tea.Cmd {
+func (m *Model) Init() tea.Cmd {
 	return nil
+}
+
+func Run() error {
+	m := &Model{
+		SelectedCategory: make(map[int]bool),
+		SelectedOption:   make(map[int]bool),
+	}
+	p := tea.NewProgram(m)
+	_, err := p.Run()
+	return err
 }

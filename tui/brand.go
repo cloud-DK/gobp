@@ -27,7 +27,7 @@ const ASCIILogo = `
 var BrandStyle = lipgloss.NewStyle().
 	Bold(true).
 	Foreground(lipgloss.Color("#FAFAFA")).
-	Background(lipgloss.Color("#7D56F4")).
+	// Background(lipgloss.Color("#7D56F4")).
 	Padding(1, 2)
 
 func RenderLogo() string {

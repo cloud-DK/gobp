@@ -4,34 +4,34 @@ import (
 	"fmt"
 
 	"github.com/jmoiron/sqlx"
-{{if eq .Dialect "postgres"}}
+{{- if eq .Dialect "postgres"}}
 	_ "github.com/lib/pq"
-{{else if eq .Dialect "mysql"}}
+{{- else if eq .Dialect "mysql"}}
 	_ "github.com/go-sql-driver/mysql"
-{{else if eq .Dialect "sqlite"}}
+{{- else if eq .Dialect "sqlite"}}
 	_ "github.com/mattn/go-sqlite3"
-{{else if eq .Dialect "sqlserver"}}
+{{- else if eq .Dialect "sqlserver"}}
 	_ "github.com/microsoft/go-mssqldb"
-{{end}})
+{{- end}}
+)
 
 type DB struct {
 	*sqlx.DB
 }
 
 func New(dsn string) (*DB, error) {
-{{if eq .Dialect "postgres"}}
+{{- if eq .Dialect "postgres"}}
 	db, err := sqlx.Connect("postgres", dsn)
-{{else if eq .Dialect "mysql"}}
+{{- else if eq .Dialect "mysql"}}
 	db, err := sqlx.Connect("mysql", dsn)
-{{else if eq .Dialect "sqlite"}}
+{{- else if eq .Dialect "sqlite"}}
 	db, err := sqlx.Connect("sqlite3", dsn)
-{{else if eq .Dialect "sqlserver"}}
+{{- else if eq .Dialect "sqlserver"}}
 	db, err := sqlx.Connect("sqlserver", dsn)
-{{end}}
+{{- end}}
 	if err != nil {
 		return nil, fmt.Errorf("connect to database: %w", err)
 	}
-
 	return &DB{db}, nil
 }
 

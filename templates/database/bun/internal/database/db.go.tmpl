@@ -5,46 +5,45 @@ import (
 	"fmt"
 
 	"github.com/uptrace/bun"
-{{if eq .Dialect "postgres"}}
+{{- if eq .Dialect "postgres"}}
 	"github.com/uptrace/bun/dialect/pgdialect"
 	_ "github.com/lib/pq"
-{{else if eq .Dialect "mysql"}}
+{{- else if eq .Dialect "mysql"}}
 	"github.com/uptrace/bun/dialect/mysqldialect"
 	_ "github.com/go-sql-driver/mysql"
-{{else if eq .Dialect "sqlite"}}
+{{- else if eq .Dialect "sqlite"}}
 	"github.com/uptrace/bun/dialect/sqlitedialect"
 	"github.com/uptrace/bun/driver/sqliteshim"
-{{end}})
+{{- end}}
+)
 
 type DB struct {
 	*bun.DB
 }
 
 func New(dsn string) (*DB, error) {
-{{if eq .Dialect "postgres"}}
+{{- if eq .Dialect "postgres"}}
 	sqldb, err := sql.Open("postgres", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
 	}
 	db := bun.NewDB(sqldb, pgdialect.New())
-{{else if eq .Dialect "mysql"}}
+{{- else if eq .Dialect "mysql"}}
 	sqldb, err := sql.Open("mysql", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
 	}
 	db := bun.NewDB(sqldb, mysqldialect.New())
-{{else if eq .Dialect "sqlite"}}
+{{- else if eq .Dialect "sqlite"}}
 	sqldb, err := sql.Open(sqliteshim.ShimName, dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
 	}
 	db := bun.NewDB(sqldb, sqlitedialect.New())
-{{end}}
-
+{{- end}}
 	if err := db.Ping(); err != nil {
 		return nil, fmt.Errorf("ping database: %w", err)
 	}
-
 	return &DB{db}, nil
 }
 

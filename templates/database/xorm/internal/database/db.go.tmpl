@@ -4,34 +4,33 @@ import (
 	"fmt"
 
 	"xorm.io/xorm"
-{{if eq .Dialect "postgres"}}
+{{- if eq .Dialect "postgres"}}
 	_ "github.com/lib/pq"
-{{else if eq .Dialect "mysql"}}
+{{- else if eq .Dialect "mysql"}}
 	_ "github.com/go-sql-driver/mysql"
-{{else if eq .Dialect "sqlite"}}
+{{- else if eq .Dialect "sqlite"}}
 	_ "github.com/mattn/go-sqlite3"
-{{end}})
+{{- end}}
+)
 
 type DB struct {
 	*xorm.Engine
 }
 
 func New(dsn string) (*DB, error) {
-{{if eq .Dialect "postgres"}}
+{{- if eq .Dialect "postgres"}}
 	engine, err := xorm.NewEngine("postgres", dsn)
-{{else if eq .Dialect "mysql"}}
+{{- else if eq .Dialect "mysql"}}
 	engine, err := xorm.NewEngine("mysql", dsn)
-{{else if eq .Dialect "sqlite"}}
+{{- else if eq .Dialect "sqlite"}}
 	engine, err := xorm.NewEngine("sqlite3", dsn)
-{{end}}
+{{- end}}
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
 	}
-
 	if err := engine.Ping(); err != nil {
 		return nil, fmt.Errorf("ping database: %w", err)
 	}
-
 	return &DB{engine}, nil
 }
 

@@ -1,0 +1,85 @@
+package server
+
+import (
+	"context"
+	"log/slog"
+	"net/http"
+	"os"
+	"os/signal"
+	"runtime"
+	"syscall"
+	"time"
+
+	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v4/middleware"
+)
+
+type Server struct {
+	echo      *echo.Echo
+	startTime time.Time
+}
+
+func New() *Server {
+	e := echo.New()
+	e.HideBanner = true
+	e.Use(middleware.Recover())
+	e.Use(middleware.RateLimiter(middleware.NewRateLimiterMemoryStore(100)))
+	e.Use(middleware.RequestLoggerWithConfig(middleware.RequestLoggerConfig{
+		LogURI:    true,
+		LogMethod: true,
+		LogStatus: true,
+		LogError:  true,
+		LogValuesFunc: func(c echo.Context, v middleware.RequestLoggerValues) error {
+			slog.Info("request", "method", v.Method, "uri", v.URI, "status", v.Status, "error", v.Error)
+			return nil
+		},
+	}))
+
+	s := &Server{echo: e, startTime: time.Now()}
+	s.routes()
+	return s
+}
+
+func (s *Server) routes() {
+	s.echo.GET("/", func(c echo.Context) error {
+		return c.String(http.StatusOK, "Hello, World!")
+	})
+	api := s.echo.Group("/api")
+	api.GET("/health", s.handleHealth)
+}
+
+func (s *Server) handleHealth(c echo.Context) error {
+	return c.JSON(http.StatusOK, map[string]any{
+		"status":     "ok",
+		"uptime":     time.Since(s.startTime).String(),
+		"goroutines": runtime.NumGoroutine(),
+	})
+}
+
+func (s *Server) Start() error {
+	port := getEnv("PORT", "8080")
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
+
+	go func() {
+		<-quit
+		slog.Info("shutting down", "uptime", time.Since(s.startTime))
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		s.echo.Shutdown(ctx)
+	}()
+
+	slog.Info("starting server", "port", port)
+	if err := s.echo.Start(":" + port); err != nil && err != http.ErrServerClosed {
+		return err
+	}
+	return nil
+}
+
+func getEnv(key, def string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return def
+}

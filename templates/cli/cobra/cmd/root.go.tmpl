@@ -1,0 +1,41 @@
+package cmd
+
+import (
+	"github.com/spf13/cobra"
+)
+
+// Version variables set at build time via -ldflags "-X 'cmd.Version=1.0.0'"
+var (
+	Version   = "dev"
+	BuildDate = "unknown"
+	GitCommit = "unknown"
+)
+
+func NewCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:           "{{.ProjectName}}",
+		Short:         "A CLI application",
+		Long:          "A CLI application built with Cobra.",
+		RunE:          func(cmd *cobra.Command, args []string) error { return cmd.Help() },
+		SilenceUsage:  true,
+		SilenceErrors: true,
+	}
+
+	cmd.PersistentFlags().BoolP("verbose", "v", false, "enable verbose logging")
+	cmd.AddCommand(newVersionCmd())
+
+	return cmd
+}
+
+func newVersionCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:     "version",
+		Aliases: []string{"v", "ver"},
+		Short:   "Show version information",
+		Run: func(cmd *cobra.Command, args []string) {
+			cmd.Println(Version)
+			cmd.Printf("Build Date: %s\n", BuildDate)
+			cmd.Printf("Git Commit: %s\n", GitCommit)
+		},
+	}
+}

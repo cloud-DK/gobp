@@ -1,43 +1,39 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"os"
-	"os/signal"
-	"syscall"
-	"time"
 
+	"github.com/cloud-dk/gobp/generator"
 	"github.com/cloud-dk/gobp/tui"
 )
 
 func main() {
-	startTime := time.Now()
-	// Startup global context.
-	ctx := context.Background()
-	go shutdown(startTime, ctx) // Set up graceful shutdown
-	defer func() {
-		elapsed := time.Since(startTime)
-		fmt.Printf("Execution took %s\n", elapsed)
-	}()
-
-	if err := tui.Run(); err != nil {
-		fmt.Printf("Error running TUI: %v\n", err)
+	result, err := tui.Run()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}
-}
 
-func shutdown(startTime time.Time, ctx context.Context) {
-	s := make(chan os.Signal, 1)
-	signal.Notify(s, os.Interrupt)
-	signal.Notify(s, syscall.SIGTERM)
-	go func() {
-		sig := <-s
-		elapsed := time.Since(startTime)
-		fmt.Printf("Shut down down signal received <%v>. \n ", sig)
-		fmt.Printf("Shutting down after %s\n", elapsed)
-		// clean up here
-		ctx.Done()
-		os.Exit(0)
-	}()
+	if result.Option == "" {
+		return
+	}
+
+	outputDir, err := os.Getwd()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+
+	if err := generator.Generate(generator.Config{
+		ModuleName: result.ModuleName,
+		Category:   result.Category,
+		Option:     result.Option,
+		OutputDir:  outputDir,
+	}); err != nil {
+		fmt.Fprintf(os.Stderr, "error generating project: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("Project generated in %s\n", outputDir)
 }

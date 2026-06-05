@@ -14,8 +14,16 @@ type step int
 const (
 	stepCategory step = iota
 	stepOption
+	stepModule
 	stepDone
 )
+
+// Result holds the user's selections returned by Run.
+type Result struct {
+	Category   string
+	Option     string
+	ModuleName string
+}
 
 type Model struct {
 	step step
@@ -27,6 +35,7 @@ type Model struct {
 
 	selectedCategory    string
 	selectedOptionsList []string
+	moduleInput         string
 	err                 error
 }
 
@@ -34,16 +43,16 @@ func (m *Model) Init() tea.Cmd {
 	return nil
 }
 
-func Run() error {
+func Run() (*Result, error) {
 	categories, err := templates.GetCategories()
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	categories = filterCategories(categories)
 	sort.Strings(categories)
 	if len(categories) == 0 {
-		return errors.New("no template categories found")
+		return nil, errors.New("no template categories found")
 	}
 
 	m := &Model{
@@ -53,8 +62,21 @@ func Run() error {
 	}
 
 	p := tea.NewProgram(m)
-	_, err = p.Run()
-	return err
+	final, err := p.Run()
+	if err != nil {
+		return nil, err
+	}
+
+	fm := final.(*Model)
+	option := ""
+	if len(fm.selectedOptionsList) > 0 {
+		option = fm.selectedOptionsList[0]
+	}
+	return &Result{
+		Category:   fm.selectedCategory,
+		Option:     option,
+		ModuleName: fm.moduleInput,
+	}, nil
 }
 
 func filterCategories(categories []string) []string {

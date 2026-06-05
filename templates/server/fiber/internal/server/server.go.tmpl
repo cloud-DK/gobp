@@ -1,0 +1,68 @@
+package server
+
+import (
+	"log/slog"
+	"os"
+	"os/signal"
+	"runtime"
+	"syscall"
+	"time"
+
+	"github.com/gofiber/fiber/v3"
+	"github.com/gofiber/fiber/v3/middleware/logger"
+	"github.com/gofiber/fiber/v3/middleware/recover"
+)
+
+type Server struct {
+	app       *fiber.App
+	startTime time.Time
+}
+
+func New() *Server {
+	app := fiber.New(fiber.Config{DisableStartupMessage: true})
+	app.Use(logger.New())
+	app.Use(recover.New())
+
+	s := &Server{app: app, startTime: time.Now()}
+	s.routes()
+	return s
+}
+
+func (s *Server) routes() {
+	s.app.Get("/", func(c fiber.Ctx) error {
+		return c.SendString("Hello, World!")
+	})
+	api := s.app.Group("/api")
+	api.Get("/health", s.handleHealth)
+}
+
+func (s *Server) handleHealth(c fiber.Ctx) error {
+	return c.JSON(fiber.Map{
+		"status":     "ok",
+		"uptime":     time.Since(s.startTime).String(),
+		"goroutines": runtime.NumGoroutine(),
+	})
+}
+
+func (s *Server) Start() error {
+	port := getEnv("PORT", "8080")
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
+
+	go func() {
+		<-quit
+		slog.Info("shutting down", "uptime", time.Since(s.startTime))
+		s.app.Shutdown()
+	}()
+
+	slog.Info("starting server", "port", port)
+	return s.app.Listen(":" + port)
+}
+
+func getEnv(key, def string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return def
+}

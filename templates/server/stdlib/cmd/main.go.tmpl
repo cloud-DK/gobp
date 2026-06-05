@@ -1,0 +1,15 @@
+package main
+
+import (
+	"log/slog"
+	"os"
+
+	"{{.ModuleName}}/internal/server"
+)
+
+func main() {
+	if err := server.New().Start(); err != nil {
+		slog.Error("server error", "error", err)
+		os.Exit(1)
+	}
+}

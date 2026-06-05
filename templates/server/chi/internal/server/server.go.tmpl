@@ -1,0 +1,77 @@
+package server
+
+import (
+	"context"
+	"encoding/json"
+	"log/slog"
+	"net/http"
+	"os"
+	"os/signal"
+	"runtime"
+	"syscall"
+	"time"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
+)
+
+type Server struct {
+	router    *chi.Mux
+	srv       *http.Server
+	startTime time.Time
+}
+
+func New() *Server {
+	r := chi.NewRouter()
+	r.Use(middleware.Recoverer)
+	r.Use(middleware.Logger)
+
+	s := &Server{router: r, startTime: time.Now()}
+	s.srv = &http.Server{Addr: ":" + getEnv("PORT", "8080"), Handler: r}
+	s.routes()
+	return s
+}
+
+func (s *Server) routes() {
+	s.router.Get("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("Hello, World!"))
+	})
+	s.router.Route("/api", func(r chi.Router) {
+		r.Get("/health", s.handleHealth)
+	})
+}
+
+func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]any{
+		"status":     "ok",
+		"uptime":     time.Since(s.startTime).String(),
+		"goroutines": runtime.NumGoroutine(),
+	})
+}
+
+func (s *Server) Start() error {
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
+
+	go func() {
+		<-quit
+		slog.Info("shutting down", "uptime", time.Since(s.startTime))
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		s.srv.Shutdown(ctx)
+	}()
+
+	slog.Info("starting server", "addr", s.srv.Addr)
+	if err := s.srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		return err
+	}
+	return nil
+}
+
+func getEnv(key, def string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return def
+}

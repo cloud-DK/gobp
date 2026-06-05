@@ -23,7 +23,7 @@ func New() *Server {
 	e := echo.New()
 	e.HideBanner = true
 	e.Use(middleware.Recover())
-	e.Use(middleware.RateLimiter(middleware.NewRateLimiterMemoryStore(100)))
+	e.Use(middleware.RateLimiter(middleware.NewRateLimiterMemoryStore(20)))
 	e.Use(middleware.RequestLoggerWithConfig(middleware.RequestLoggerConfig{
 		LogURI:    true,
 		LogMethod: true,
@@ -35,7 +35,7 @@ func New() *Server {
 		},
 	}))
 
-	s := &Server{echo: e, startTime: time.Now()}
+	s := &Server{echo: e}
 	s.routes()
 	return s
 }
@@ -57,29 +57,30 @@ func (s *Server) handleHealth(c echo.Context) error {
 }
 
 func (s *Server) Start() error {
-	port := getEnv("PORT", "8080")
+	s.startTime = time.Now()
+
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
 
+	done := make(chan struct{})
 	go func() {
 		<-quit
 		slog.Info("shutting down", "uptime", time.Since(s.startTime))
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		s.echo.Shutdown(ctx)
+		_ = s.echo.Shutdown(ctx)
+		close(done)
 	}()
 
 	slog.Info("starting server", "port", port)
 	if err := s.echo.Start(":" + port); err != nil && err != http.ErrServerClosed {
 		return err
 	}
+	<-done
 	return nil
-}
-
-func getEnv(key, def string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return def
 }

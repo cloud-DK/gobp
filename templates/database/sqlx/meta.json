@@ -1,0 +1,10 @@
+{
+  "name": "sqlx",
+  "description": "Thin extension of database/sql with named queries and struct scanning",
+  "dialects": [
+    {"name": "postgres",   "description": "PostgreSQL via lib/pq driver"},
+    {"name": "mysql",      "description": "MySQL / MariaDB"},
+    {"name": "sqlite",     "description": "SQLite — file-based, zero config"},
+    {"name": "sqlserver",  "description": "Microsoft SQL Server"}
+  ]
+}

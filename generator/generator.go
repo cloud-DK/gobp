@@ -35,6 +35,16 @@ type cmdFile struct {
 	Cmd []string `json:"cmd"`
 }
 
+// WriteShared writes the _shared template directory into outDir. Call this
+// once before calling Generate for the first non-UI selection.
+func WriteShared(moduleName, outDir string) error {
+	data := templateData{
+		ModuleName:  moduleName,
+		ProjectName: ProjectName(moduleName, outDir),
+	}
+	return writeDir("_shared", outDir, data)
+}
+
 func Generate(cfg Config) error {
 	optionPath := cfg.Category + "/" + cfg.Option
 
@@ -45,19 +55,13 @@ func Generate(cfg Config) error {
 
 	data := templateData{
 		ModuleName:  cfg.ModuleName,
-		ProjectName: projectName(cfg.ModuleName, cfg.OutputDir),
+		ProjectName: ProjectName(cfg.ModuleName, cfg.OutputDir),
 		Category:    cfg.Category,
 		Framework:   cfg.Option,
 		Dialect:     cfg.Variant,
 	}
 
-	if err := writeDir("_shared", cfg.OutputDir, data); err != nil {
-		return fmt.Errorf("shared templates: %w", err)
-	}
-	if err := writeDir(optionPath, cfg.OutputDir, data); err != nil {
-		return fmt.Errorf("option templates: %w", err)
-	}
-	return nil
+	return writeDir(optionPath, cfg.OutputDir, data)
 }
 
 func GoModInit(moduleName, dir string) error {
@@ -73,11 +77,15 @@ func writeDir(srcDir, outBase string, data templateData) error {
 		if err != nil || d.IsDir() {
 			return err
 		}
-		if filepath.Base(path) == "dialects.txt" {
+		base := filepath.Base(path)
+		if base == "dialects.txt" || base == "meta.json" {
 			return nil
 		}
 
-		rel, _ := filepath.Rel(srcDir, path)
+		rel, err := filepath.Rel(srcDir, path)
+		if err != nil {
+			return fmt.Errorf("rel path %s: %w", path, err)
+		}
 		rel = filepath.ToSlash(rel)
 
 		outName := strings.TrimSuffix(rel, ".tmpl")
@@ -109,7 +117,10 @@ func writeDir(srcDir, outBase string, data templateData) error {
 		}
 		out := buf.Bytes()
 		if strings.HasSuffix(outName, ".go") {
-			if formatted, err := format.Source(out); err == nil {
+			formatted, fmtErr := format.Source(out)
+			if fmtErr != nil {
+				fmt.Fprintf(os.Stderr, "warning: could not format %s: %v\n", outPath, fmtErr)
+			} else {
 				out = formatted
 			}
 		}
@@ -122,7 +133,7 @@ func runCmd(raw []byte, cfg Config) error {
 	if err := json.Unmarshal(raw, &cf); err != nil {
 		return fmt.Errorf("parse cmd.json: %w", err)
 	}
-	name := projectName(cfg.ModuleName, cfg.OutputDir)
+	name := ProjectName(cfg.ModuleName, cfg.OutputDir)
 	args := make([]string, len(cf.Cmd))
 	for i, a := range cf.Cmd {
 		args[i] = strings.ReplaceAll(a, "${projectName}", name)
@@ -135,7 +146,7 @@ func runCmd(raw []byte, cfg Config) error {
 	return cmd.Run()
 }
 
-func projectName(moduleName, outputDir string) string {
+func ProjectName(moduleName, outputDir string) string {
 	if moduleName != "" {
 		parts := strings.Split(moduleName, "/")
 		if last := parts[len(parts)-1]; last != "" {

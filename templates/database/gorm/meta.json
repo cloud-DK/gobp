@@ -1,0 +1,10 @@
+{
+  "name": "GORM",
+  "description": "Feature-rich ORM with auto-migration, associations, and hooks",
+  "dialects": [
+    {"name": "postgres",   "description": "PostgreSQL via pgx driver"},
+    {"name": "mysql",      "description": "MySQL / MariaDB"},
+    {"name": "sqlite",     "description": "SQLite — file-based, zero config"},
+    {"name": "sqlserver",  "description": "Microsoft SQL Server"}
+  ]
+}

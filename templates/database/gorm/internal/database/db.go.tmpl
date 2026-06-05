@@ -2,6 +2,7 @@ package database
 
 import (
 	"fmt"
+	"time"
 
 	"gorm.io/gorm"
 {{- if eq .Dialect "postgres"}}
@@ -28,10 +29,19 @@ func New(dsn string) (*DB, error) {
 	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
 {{- else if eq .Dialect "sqlserver"}}
 	db, err := gorm.Open(sqlserver.Open(dsn), &gorm.Config{})
+{{- else}}
+	return nil, fmt.Errorf("unsupported dialect %q", "{{.Dialect}}")
 {{- end}}
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
 	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		return nil, fmt.Errorf("get underlying sql.DB: %w", err)
+	}
+	sqlDB.SetMaxOpenConns(25)
+	sqlDB.SetMaxIdleConns(25)
+	sqlDB.SetConnMaxLifetime(5 * time.Minute)
 	return &DB{db}, nil
 }
 

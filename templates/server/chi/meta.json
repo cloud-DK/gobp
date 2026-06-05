@@ -1,0 +1,4 @@
+{
+  "name": "Chi",
+  "description": "Lightweight, idiomatic router built on net/http — no external deps"
+}

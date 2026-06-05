@@ -26,8 +26,12 @@ func New() *Server {
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Logger)
 
-	s := &Server{router: r, startTime: time.Now()}
-	s.srv = &http.Server{Addr: ":" + getEnv("PORT", "8080"), Handler: r}
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+	s := &Server{router: r}
+	s.srv = &http.Server{Addr: ":" + port, Handler: r}
 	s.routes()
 	return s
 }
@@ -43,35 +47,35 @@ func (s *Server) routes() {
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]any{
+	if err := json.NewEncoder(w).Encode(map[string]any{
 		"status":     "ok",
 		"uptime":     time.Since(s.startTime).String(),
 		"goroutines": runtime.NumGoroutine(),
-	})
+	}); err != nil {
+		http.Error(w, "encoding error", http.StatusInternalServerError)
+	}
 }
 
 func (s *Server) Start() error {
+	s.startTime = time.Now()
+
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
 
+	done := make(chan struct{})
 	go func() {
 		<-quit
 		slog.Info("shutting down", "uptime", time.Since(s.startTime))
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		s.srv.Shutdown(ctx)
+		_ = s.srv.Shutdown(ctx)
+		close(done)
 	}()
 
 	slog.Info("starting server", "addr", s.srv.Addr)
 	if err := s.srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		return err
 	}
+	<-done
 	return nil
-}
-
-func getEnv(key, def string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return def
 }

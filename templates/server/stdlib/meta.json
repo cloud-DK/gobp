@@ -1,0 +1,4 @@
+{
+  "name": "Stdlib",
+  "description": "Pure net/http — no framework, no dependencies"
+}

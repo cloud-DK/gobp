@@ -3,6 +3,7 @@ package database
 import (
 	"database/sql"
 	"fmt"
+	"time"
 
 	"github.com/uptrace/bun"
 {{- if eq .Dialect "postgres"}}
@@ -40,7 +41,12 @@ func New(dsn string) (*DB, error) {
 		return nil, fmt.Errorf("open database: %w", err)
 	}
 	db := bun.NewDB(sqldb, sqlitedialect.New())
+{{- else}}
+	return nil, fmt.Errorf("unsupported dialect %q", "{{.Dialect}}")
 {{- end}}
+	db.SetMaxOpenConns(25)
+	db.SetMaxIdleConns(25)
+	db.SetConnMaxLifetime(5 * time.Minute)
 	if err := db.Ping(); err != nil {
 		return nil, fmt.Errorf("ping database: %w", err)
 	}

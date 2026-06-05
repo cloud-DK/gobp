@@ -1,0 +1,9 @@
+{
+  "name": "Bun",
+  "description": "SQL-first ORM with fast query builder and schema migrations",
+  "dialects": [
+    {"name": "postgres", "description": "PostgreSQL via pgx driver"},
+    {"name": "mysql",    "description": "MySQL / MariaDB"},
+    {"name": "sqlite",   "description": "SQLite — file-based, zero config"}
+  ]
+}

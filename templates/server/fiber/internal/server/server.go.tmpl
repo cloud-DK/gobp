@@ -23,7 +23,7 @@ func New() *Server {
 	app.Use(logger.New())
 	app.Use(recover.New())
 
-	s := &Server{app: app, startTime: time.Now()}
+	s := &Server{app: app}
 	s.routes()
 	return s
 }
@@ -45,7 +45,12 @@ func (s *Server) handleHealth(c fiber.Ctx) error {
 }
 
 func (s *Server) Start() error {
-	port := getEnv("PORT", "8080")
+	s.startTime = time.Now()
+
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
@@ -53,16 +58,9 @@ func (s *Server) Start() error {
 	go func() {
 		<-quit
 		slog.Info("shutting down", "uptime", time.Since(s.startTime))
-		s.app.Shutdown()
+		_ = s.app.Shutdown()
 	}()
 
 	slog.Info("starting server", "port", port)
 	return s.app.Listen(":" + port)
-}
-
-func getEnv(key, def string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return def
 }

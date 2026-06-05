@@ -2,11 +2,22 @@ package templates
 
 import (
 	"embed"
-	"strings"
+	"encoding/json"
 )
 
 //go:embed all:_shared server cli ui database
 var TemplateFS embed.FS
+
+type Meta struct {
+	Name        string        `json:"name"`
+	Description string        `json:"description"`
+	Dialects    []DialectMeta `json:"dialects,omitempty"`
+}
+
+type DialectMeta struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+}
 
 func GetCategories() ([]string, error) {
 	entries, err := TemplateFS.ReadDir(".")
@@ -36,21 +47,35 @@ func GetOptions(category string) ([]string, error) {
 	return options, nil
 }
 
-func HasVariants(category, option string) bool {
-	_, err := TemplateFS.Open(category + "/" + option + "/dialects.txt")
-	return err == nil
+// GetMeta returns the metadata for a template option. If meta.json is absent
+// or unreadable it returns a best-effort struct so callers never get nil.
+func GetMeta(category, option string) (*Meta, error) {
+	data, err := TemplateFS.ReadFile(category + "/" + option + "/meta.json")
+	if err != nil {
+		return &Meta{Name: option}, nil
+	}
+	var m Meta
+	if err := json.Unmarshal(data, &m); err != nil {
+		return nil, err
+	}
+	if m.Name == "" {
+		m.Name = option
+	}
+	return &m, nil
 }
 
-func GetVariants(category, option string) ([]string, error) {
-	data, err := TemplateFS.ReadFile(category + "/" + option + "/dialects.txt")
+func HasVariants(category, option string) bool {
+	m, err := GetMeta(category, option)
+	if err != nil {
+		return false
+	}
+	return len(m.Dialects) > 0
+}
+
+func GetVariants(category, option string) ([]DialectMeta, error) {
+	m, err := GetMeta(category, option)
 	if err != nil {
 		return nil, err
 	}
-	var variants []string
-	for _, line := range strings.Split(string(data), "\n") {
-		if line = strings.TrimSpace(line); line != "" {
-			variants = append(variants, line)
-		}
-	}
-	return variants, nil
+	return m.Dialects, nil
 }

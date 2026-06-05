@@ -1,0 +1,9 @@
+{
+  "name": "xorm",
+  "description": "Simple and powerful ORM with sync2 schema migration support",
+  "dialects": [
+    {"name": "postgres", "description": "PostgreSQL via pgx driver"},
+    {"name": "mysql",    "description": "MySQL / MariaDB"},
+    {"name": "sqlite",   "description": "SQLite — file-based, zero config"}
+  ]
+}

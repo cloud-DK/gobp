@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -9,7 +10,18 @@ import (
 	"github.com/cloud-dk/gobp/tui"
 )
 
+// Set at build time: -ldflags "-X main.version=1.2.3"
+var version = "dev"
+
 func main() {
+	showVersion := flag.Bool("version", false, "print version and exit")
+	flag.Parse()
+
+	if *showVersion {
+		fmt.Println(version)
+		return
+	}
+
 	result, err := tui.Run()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
@@ -36,7 +48,18 @@ func main() {
 	for _, sel := range result.Selections {
 		if sel.Category != "ui" {
 			needsModInit = true
+			break
 		}
+	}
+
+	if needsModInit {
+		if err := generator.WriteShared(result.ModuleName, outputDir); err != nil {
+			fmt.Fprintf(os.Stderr, "error writing shared templates: %v\n", err)
+			os.Exit(1)
+		}
+	}
+
+	for _, sel := range result.Selections {
 		if err := generator.Generate(generator.Config{
 			ModuleName: result.ModuleName,
 			Category:   sel.Category,

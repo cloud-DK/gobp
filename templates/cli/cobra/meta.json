@@ -1,0 +1,4 @@
+{
+  "name": "Cobra",
+  "description": "The de-facto standard for Go CLIs — subcommands, flags, auto-completion"
+}

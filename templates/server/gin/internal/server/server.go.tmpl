@@ -20,12 +20,15 @@ type Server struct {
 }
 
 func New() *Server {
-	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
 	r.Use(gin.Recovery())
 
-	s := &Server{startTime: time.Now(), router: r}
-	s.srv = &http.Server{Addr: ":" + getEnv("PORT", "8080"), Handler: r}
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+	s := &Server{router: r}
+	s.srv = &http.Server{Addr: ":" + port, Handler: r}
 	s.routes()
 	return s
 }
@@ -47,27 +50,25 @@ func (s *Server) handleHealth(c *gin.Context) {
 }
 
 func (s *Server) Start() error {
+	s.startTime = time.Now()
+
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
 
+	done := make(chan struct{})
 	go func() {
 		<-quit
 		slog.Info("shutting down", "uptime", time.Since(s.startTime))
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		s.srv.Shutdown(ctx)
+		_ = s.srv.Shutdown(ctx)
+		close(done)
 	}()
 
 	slog.Info("starting server", "addr", s.srv.Addr)
 	if err := s.srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		return err
 	}
+	<-done
 	return nil
-}
-
-func getEnv(key, def string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return def
 }

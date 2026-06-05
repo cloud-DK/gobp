@@ -4,6 +4,7 @@ import (
 	"errors"
 	"sort"
 	"strings"
+	"unicode/utf8"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/cloud-dk/gobp/templates"
@@ -18,7 +19,15 @@ const (
 	stepModule
 	stepOutputDir
 	stepDone
+	stepError
 )
+
+// item is a selectable list entry with an optional description and checkbox state.
+type item struct {
+	name    string
+	desc    string
+	checked bool
+}
 
 type Selection struct {
 	Category string
@@ -35,22 +44,22 @@ type Result struct {
 type Model struct {
 	step step
 
-	categories     []string
-	categoryChecks map[int]bool
-	cursor         int
+	categories []item
+	cursor     int
 
-	pendingCategories []string
-	currentCategory   string
-	currentOption     string
-	options           []string
-	variants          []string
+	pendingCategories []item
+	currentCategory   item
+	currentOption     item
+	options           []item
+	variants          []item
 
 	selections []Selection
 
-	moduleInput     string
-	outputDirChoice int // 0 = cwd, 1 = subdir
+	moduleInput    string
+	outputInSubdir bool
 
-	err error
+	err     error
+	errPrev step // step to return to on esc from error
 }
 
 func (m *Model) Init() tea.Cmd {
@@ -58,28 +67,34 @@ func (m *Model) Init() tea.Cmd {
 }
 
 func Run() (*Result, error) {
-	categories, err := templates.GetCategories()
+	rawCategories, err := templates.GetCategories()
 	if err != nil {
 		return nil, err
 	}
-	categories = filterCategories(categories)
-	sort.Strings(categories)
-	if len(categories) == 0 {
+	rawCategories = filterCategories(rawCategories)
+	sort.Strings(rawCategories)
+	if len(rawCategories) == 0 {
 		return nil, errors.New("no template categories found")
 	}
+	categories := make([]item, len(rawCategories))
+	for i, c := range rawCategories {
+		categories[i] = item{name: c}
+	}
 	m := &Model{
-		step:           stepCategories,
-		categories:     categories,
-		categoryChecks: make(map[int]bool),
+		step:       stepCategories,
+		categories: categories,
 	}
 	p := tea.NewProgram(m)
 	final, err := p.Run()
 	if err != nil {
 		return nil, err
 	}
-	fm := final.(*Model)
+	fm, ok := final.(*Model)
+	if !ok {
+		return nil, errors.New("unexpected model type returned from TUI")
+	}
 	outDir := ""
-	if fm.outputDirChoice == 1 {
+	if fm.outputInSubdir {
 		outDir = projectNameFromModule(fm.moduleInput)
 	}
 	return &Result{
@@ -119,7 +134,7 @@ func (m *Model) handleModuleInput(key string) (tea.Model, tea.Cmd) {
 			m.moduleInput = m.moduleInput[:len(m.moduleInput)-1]
 		}
 	default:
-		if len(key) == 1 {
+		if utf8.RuneCountInString(key) == 1 {
 			m.moduleInput += key
 		}
 	}
@@ -131,7 +146,12 @@ func (m *Model) handleNavInput(key string) (tea.Model, tea.Cmd) {
 	case "q":
 		return m, tea.Quit
 	case "esc":
-		m.goBack()
+		if m.step == stepError {
+			m.step = m.errPrev
+			m.err = nil
+		} else {
+			m.goBack()
+		}
 	case "up", "k":
 		if m.cursor > 0 {
 			m.cursor--
@@ -143,7 +163,7 @@ func (m *Model) handleNavInput(key string) (tea.Model, tea.Cmd) {
 		}
 	case "space":
 		if m.step == stepCategories {
-			m.categoryChecks[m.cursor] = !m.categoryChecks[m.cursor]
+			m.categories[m.cursor].checked = !m.categories[m.cursor].checked
 		} else {
 			return m.selectCurrent()
 		}
@@ -171,23 +191,21 @@ func (m *Model) goBack() {
 	switch m.step {
 	case stepOption:
 		m.step = stepCategories
-		m.selections = nil
 		m.pendingCategories = nil
-		m.currentCategory = ""
-		m.currentOption = ""
+		m.currentCategory = item{}
+		m.currentOption = item{}
 		m.options = nil
 		m.cursor = 0
 	case stepVariant:
 		m.step = stepOption
-		m.currentOption = ""
+		m.currentOption = item{}
 		m.variants = nil
 		m.cursor = 0
 	case stepModule:
 		m.step = stepCategories
-		m.selections = nil
 		m.pendingCategories = nil
-		m.currentCategory = ""
-		m.currentOption = ""
+		m.currentCategory = item{}
+		m.currentOption = item{}
 		m.options = nil
 		m.variants = nil
 		m.moduleInput = ""
@@ -197,16 +215,28 @@ func (m *Model) goBack() {
 		m.cursor = 0
 	case stepDone:
 		m.step = stepOutputDir
-		m.cursor = m.outputDirChoice
+		if m.outputInSubdir {
+			m.cursor = 1
+		} else {
+			m.cursor = 0
+		}
 	}
+}
+
+func (m *Model) setError(err error, returnTo step) (tea.Model, tea.Cmd) {
+	m.err = err
+	m.errPrev = returnTo
+	m.step = stepError
+	return m, nil
 }
 
 func (m *Model) selectCurrent() (tea.Model, tea.Cmd) {
 	switch m.step {
 	case stepCategories:
-		var checked []string
-		for i, cat := range m.categories {
-			if m.categoryChecks[i] {
+		m.selections = nil
+		var checked []item
+		for _, cat := range m.categories {
+			if cat.checked {
 				checked = append(checked, cat)
 			}
 		}
@@ -215,12 +245,10 @@ func (m *Model) selectCurrent() (tea.Model, tea.Cmd) {
 		}
 		m.pendingCategories = checked[1:]
 		m.currentCategory = checked[0]
-		options, err := templates.GetOptions(m.currentCategory)
+		options, err := loadOptions(m.currentCategory.name)
 		if err != nil {
-			m.err = err
-			return m, nil
+			return m.setError(err, stepCategories)
 		}
-		sort.Strings(options)
 		m.options = options
 		m.cursor = 0
 		m.step = stepOption
@@ -229,20 +257,18 @@ func (m *Model) selectCurrent() (tea.Model, tea.Cmd) {
 		if len(m.options) == 0 {
 			return m, nil
 		}
-		option := m.options[m.cursor]
-		if templates.HasVariants(m.currentCategory, option) {
-			variants, err := templates.GetVariants(m.currentCategory, option)
+		opt := m.options[m.cursor]
+		if templates.HasVariants(m.currentCategory.name, opt.name) {
+			variants, err := loadVariants(m.currentCategory.name, opt.name)
 			if err != nil {
-				m.err = err
-				return m, nil
+				return m.setError(err, stepOption)
 			}
-			sort.Strings(variants)
 			m.variants = variants
-			m.currentOption = option
+			m.currentOption = opt
 			m.cursor = 0
 			m.step = stepVariant
 		} else {
-			m.selections = append(m.selections, Selection{m.currentCategory, option, ""})
+			m.selections = append(m.selections, Selection{m.currentCategory.name, opt.name, ""})
 			m.step = m.advanceFromSelections()
 		}
 
@@ -250,12 +276,12 @@ func (m *Model) selectCurrent() (tea.Model, tea.Cmd) {
 		if len(m.variants) == 0 {
 			return m, nil
 		}
-		variant := m.variants[m.cursor]
-		m.selections = append(m.selections, Selection{m.currentCategory, m.currentOption, variant})
+		v := m.variants[m.cursor]
+		m.selections = append(m.selections, Selection{m.currentCategory.name, m.currentOption.name, v.name})
 		m.step = m.advanceFromSelections()
 
 	case stepOutputDir:
-		m.outputDirChoice = m.cursor
+		m.outputInSubdir = m.cursor == 1
 		m.step = stepDone
 
 	case stepDone:
@@ -268,20 +294,52 @@ func (m *Model) advanceFromSelections() step {
 	if len(m.pendingCategories) > 0 {
 		m.currentCategory = m.pendingCategories[0]
 		m.pendingCategories = m.pendingCategories[1:]
-		options, err := templates.GetOptions(m.currentCategory)
+		options, err := loadOptions(m.currentCategory.name)
 		if err != nil {
 			m.err = err
-			return stepOption
+			m.errPrev = stepOption
+			return stepError
 		}
-		sort.Strings(options)
 		m.options = options
-		m.currentOption = ""
+		m.currentOption = item{}
 		m.variants = nil
 		m.cursor = 0
 		return stepOption
 	}
 	m.cursor = 0
 	return stepModule
+}
+
+// loadOptions fetches options for a category and enriches them with descriptions from meta.json.
+func loadOptions(category string) ([]item, error) {
+	names, err := templates.GetOptions(category)
+	if err != nil {
+		return nil, err
+	}
+	sort.Strings(names)
+	items := make([]item, len(names))
+	for i, name := range names {
+		meta, err := templates.GetMeta(category, name)
+		if err != nil {
+			items[i] = item{name: name}
+			continue
+		}
+		items[i] = item{name: name, desc: meta.Description}
+	}
+	return items, nil
+}
+
+// loadVariants fetches dialect variants with their descriptions.
+func loadVariants(category, option string) ([]item, error) {
+	dialects, err := templates.GetVariants(category, option)
+	if err != nil {
+		return nil, err
+	}
+	items := make([]item, len(dialects))
+	for i, d := range dialects {
+		items[i] = item{name: d.Name, desc: d.Description}
+	}
+	return items, nil
 }
 
 func filterCategories(categories []string) []string {

@@ -9,9 +9,11 @@ import (
 	"github.com/cloud-dk/gobp/templates"
 )
 
-var selectedIcon = ">"
-var checkedIcon = "✓"
-var uncheckedIcon = " "
+const (
+	selectedIcon  = ">"
+	checkedIcon   = "✓"
+	uncheckedIcon = " "
+)
 
 func (m *Model) View() tea.View {
 	var sb strings.Builder
@@ -35,14 +37,14 @@ func (m *Model) View() tea.View {
 		sb.WriteString("  Step 2 of 2: Choose template options\n\n")
 		writeToggleList(&sb, m.options, m.selected, m.cursor)
 		sb.WriteString("\n  ────────────────────────────────────\n")
-		sb.WriteString("  ↑/↓: navigate   space: toggle   enter: confirm   ctrl+c/q: quit\n")
+		sb.WriteString("  ↑/↓: navigate   space: select   enter: confirm   esc: back   ctrl+c/q: quit\n")
 
 	case stepDone:
 		sb.WriteString("\n  Selection complete\n\n")
 		sb.WriteString(fmt.Sprintf("  Category: %s\n", m.selectedCategory))
 		sb.WriteString(fmt.Sprintf("  Options:  %s\n", strings.Join(m.selectedOptionsList, ", ")))
 		sb.WriteString("\n  ────────────────────────────────────\n")
-		sb.WriteString("  enter/q: quit\n")
+		sb.WriteString("  enter: quit   esc: back   ctrl+c/q: quit\n")
 	}
 
 	return tea.NewView(sb.String())
@@ -54,12 +56,35 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "ctrl+c", "q":
 			return m, tea.Quit
+		case "esc":
+			switch m.step {
+			case stepOption:
+				m.step = stepCategory
+				m.cursor = 0
+				m.options = nil
+				m.selected = make(map[int]struct{})
+				m.selectedCategory = ""
+			case stepDone:
+				m.step = stepOption
+				m.cursor = 0
+				m.selectedOptionsList = nil
+			}
+			return m, nil
 		case "up", "k":
 			if m.cursor > 0 {
 				m.cursor--
 			}
 		case "down", "j":
-			m.moveCursorDown()
+			switch m.step {
+			case stepCategory:
+				if m.cursor < len(m.categories)-1 {
+					m.cursor++
+				}
+			case stepOption:
+				if m.cursor < len(m.options)-1 {
+					m.cursor++
+				}
+			}
 		case "enter":
 			return m.selectCurrent()
 		case "space":
@@ -72,19 +97,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	return m, nil
-}
-
-func (m *Model) moveCursorDown() {
-	switch m.step {
-	case stepCategory:
-		if m.cursor < len(m.categories)-1 {
-			m.cursor++
-		}
-	case stepOption:
-		if m.cursor < len(m.options)-1 {
-			m.cursor++
-		}
-	}
 }
 
 func (m *Model) selectCurrent() (tea.Model, tea.Cmd) {
@@ -139,7 +151,7 @@ func (m *Model) toggleCurrentOption() {
 		delete(m.selected, m.cursor)
 		return
 	}
-	m.selected[m.cursor] = struct{}{}
+	m.selected = map[int]struct{}{m.cursor: {}}
 }
 
 func writeChoiceList(sb *strings.Builder, items []string, cursor int) {
